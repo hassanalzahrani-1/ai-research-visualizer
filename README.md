@@ -56,8 +56,26 @@ You'll need API keys from two services:
 
 ## Usage
 
-### Start the API Server
+### Option 1: Use the Web Interface (Recommended)
 
+#### Start the Backend
+```bash
+python -m uvicorn backend.app:app --reload
+```
+
+#### Start the Frontend
+In a new terminal:
+```bash
+cd frontend
+npm install  # First time only
+npm start
+```
+
+The web app will open at `http://localhost:3000`
+
+### Option 2: Use the API Directly
+
+Start the API server:
 ```bash
 python -m uvicorn backend.app:app --reload
 ```
@@ -217,11 +235,28 @@ ai-research-visualizer/
 │   ├── serper_client.py    # Google Scholar search client
 │   ├── scenario_client.py  # Image generation client
 │   └── scraper.py          # Web scraping module
+├── frontend/
+│   ├── public/             # Static assets
+│   ├── src/
+│   │   ├── components/     # React components
+│   │   │   ├── SearchForm.js
+│   │   │   ├── ResultsDisplay.js
+│   │   │   └── ImageGallery.js
+│   │   ├── App.js          # Main app component
+│   │   └── index.js        # Entry point
+│   ├── package.json        # Node dependencies
+│   └── .env.example        # Frontend environment template
+├── tests/
+│   ├── test_api.py         # API endpoint tests
+│   ├── test_serper_client.py
+│   └── test_scraper.py
 ├── output/                 # Generated images and results
 ├── .env.example           # Environment variables template
 ├── .env                   # Your API keys (gitignored)
 ├── .gitignore
 ├── requirements.txt       # Python dependencies
+├── pytest.ini             # Pytest configuration
+├── test_e2e.py            # End-to-end test script
 ├── postman_collection.json # Postman API collection
 └── README.md
 ```
@@ -254,52 +289,68 @@ ai-research-visualizer/
 
 ## Testing
 
-### Manual Testing
-1. Start the server: `python -m uvicorn backend.app:app --reload`
-2. Open browser: http://localhost:8000/api/docs
-3. Test each endpoint using the interactive Swagger UI
+### Automated Tests
 
-### Using Postman
-1. Import `postman_collection.json`
-2. Test individual endpoints
-3. Run full pipeline test with `/api/process`
+Run the test suite:
+```bash
+# Install test dependencies (if not already installed)
+pip install -r requirements.txt
+
+# Run all tests
+pytest
+
+# Run with verbose output
+pytest -v
+
+# Run specific test file
+pytest tests/test_api.py
+```
 
 ### End-to-End Test
-```python
-# test_e2e.py
-import requests
-import time
 
-BASE_URL = "http://localhost:8000"
+Run the complete workflow test:
+```bash
+# Make sure the backend is running first
+python -m uvicorn backend.app:app --reload
 
-# 1. Health check
-health = requests.get(f"{BASE_URL}/api/health")
-print(f"Health: {health.json()['status']}")
-
-# 2. Full pipeline
-response = requests.post(f"{BASE_URL}/api/process", json={
-    "query": "Attention Mechanism",
-    "num_papers": 2,
-    "generate_images": True
-})
-
-result = response.json()
-print(f"\nProcessed: {result['successful']}/{result['total_papers']} papers")
-
-for paper in result['papers']:
-    print(f"\n✓ {paper['title']}")
-    print(f"  Abstract source: {paper['abstract_source']}")
-    print(f"  Images: {len(paper['image_paths'])}")
+# In another terminal, run the E2E test
+python test_e2e.py
 ```
+
+This will test:
+1. ✓ Health check
+2. ✓ Search papers
+3. ✓ Full pipeline (search + scrape + generate)
+4. ✓ Last result retrieval
+
+### Manual Testing
+
+#### Using the Web Interface
+1. Start backend and frontend (see Usage section)
+2. Open http://localhost:3000
+3. Enter a search query and click "Search Papers"
+4. View results and generated images
+
+#### Using Postman
+1. Import `postman_collection.json`
+2. Set `base_url` to `http://localhost:8000`
+3. Test individual endpoints
+4. Run full pipeline test with `/api/process`
+
+#### Using Swagger UI
+1. Start the server: `python -m uvicorn backend.app:app --reload`
+2. Open browser: http://localhost:8000/api/docs
+3. Test each endpoint using the interactive interface
 
 ## Architecture
 
 ### Components
-1. **Serper Client**: Google Scholar search with retry logic
-2. **Web Scraper**: Multi-site abstract extraction with fallbacks
-3. **Scenario Client**: AI image generation with polling
-4. **FastAPI Backend**: RESTful API with validation
-5. **Pydantic Models**: Request/response validation
+1. **React Frontend**: Modern web interface with search, results, and gallery
+2. **Serper Client**: Google Scholar search with retry logic
+3. **Web Scraper**: Multi-site abstract extraction with fallbacks
+4. **Scenario Client**: AI image generation with polling
+5. **FastAPI Backend**: RESTful API with validation
+6. **Pydantic Models**: Request/response validation
 
 ### Workflow
 ```
