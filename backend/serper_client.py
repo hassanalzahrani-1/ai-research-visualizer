@@ -134,6 +134,13 @@ class SerperClient:
         try:
             response = self._make_request(payload)
             papers = self._parse_response(response)
+            
+            # Sort by year (most recent first), then by citations
+            papers.sort(key=lambda x: (x.get('year') or 0, x.get('cited_by', 0)), reverse=True)
+            
+            # Limit to requested number of results
+            papers = papers[:num_results]
+            
             logger.info(f"Successfully retrieved {len(papers)} papers")
             return papers
             

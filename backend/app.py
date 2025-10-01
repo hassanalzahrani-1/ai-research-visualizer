@@ -244,6 +244,7 @@ async def process_papers(request: ProcessPapersRequest):
     """
     try:
         logger.info(f"Processing papers for query: {request.query}")
+        logger.info(f"Request params - num_papers: {request.num_papers}, date_range: {request.date_range}, generate_images: {request.generate_images}")
         
         # Step 1: Search
         serper = get_serper_client()
