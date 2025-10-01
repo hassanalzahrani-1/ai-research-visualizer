@@ -1,15 +1,16 @@
-# Scenario.com Image Generator
+# AI Research Paper Visualizer
 
-A simple Python application that generates images using the Scenario.com API. This app securely manages API credentials and provides both interactive and command-line interfaces for image generation.
+An intelligent system that searches academic papers, extracts abstracts, and generates visual representations using AI. Combines Google Scholar search (via Serper API), web scraping, and AI image generation (via Scenario API) into a unified FastAPI backend.
 
 ## Features
 
-- 🎨 Generate images from text prompts using Scenario.com API
-- 🔐 Secure API key management with environment variables
-- 📁 Automatic image downloading and organization
-- 🖥️ Interactive CLI interface
-- ⚡ Command-line script for quick generation
-- 🛡️ Git-safe configuration (API keys are hidden)
+- 🔍 **Google Scholar Search**: Search academic papers with date filtering
+- 📄 **Smart Web Scraping**: Extract full abstracts from arXiv, IEEE, PubMed, ACM, Springer, and more
+- 🎨 **AI Image Generation**: Create visual representations of research papers
+- 🚀 **FastAPI Backend**: RESTful API with automatic documentation
+- 🔄 **Full Pipeline**: End-to-end workflow from search to visualization
+- 🛡️ **Robust Error Handling**: Retry logic and graceful fallbacks
+- 📊 **Postman Collection**: Ready-to-use API testing collection
 
 ## Setup
 
@@ -23,11 +24,19 @@ If you haven't already, navigate to your project directory.
 pip install -r requirements.txt
 ```
 
-### 3. Get Scenario.com API Credentials
+### 3. Get API Credentials
 
+You'll need API keys from two services:
+
+#### Serper API (Google Scholar Search)
+1. Sign up at [Serper.dev](https://serper.dev)
+2. Get your API key from the dashboard
+3. Free tier: 2,500 searches/month
+
+#### Scenario API (Image Generation)
 1. Sign up at [Scenario.com](https://scenario.com)
-2. Go to your dashboard and find your API credentials
-3. You'll need both an API Key and API Secret
+2. Get your API key and secret from the dashboard
+3. Free tier available for testing
 
 ### 4. Configure Environment Variables
 
@@ -38,75 +47,155 @@ pip install -r requirements.txt
 
 2. Edit the `.env` file and add your credentials:
    ```env
-   SCENARIO_API_KEY=your_actual_api_key_here
-   SCENARIO_API_SECRET=your_actual_api_secret_here
-   OUTPUT_DIR=generated_images
+   SERPER_API_KEY=your_serper_api_key_here
+   SCENARIO_API_KEY=your_scenario_api_key_here
+   SCENARIO_API_SECRET=your_scenario_api_secret_here
    ```
 
-**Important**: The `.env` file is automatically hidden from Git to protect your API keys.
+**Important**: The `.env` file is in `.gitignore` to protect your API keys.
 
 ## Usage
 
-### Interactive Mode
-
-Run the main application for an interactive experience:
+### Start the API Server
 
 ```bash
-python image_generator.py
+python -m uvicorn backend.app:app --reload
 ```
 
-This will prompt you for:
-- Image description/prompt
-- Optional parameters (width, height, number of samples)
+The API will be available at `http://localhost:8000`
 
-### Command Line Mode
+- **API Documentation**: http://localhost:8000/api/docs
+- **Alternative Docs**: http://localhost:8000/api/redoc
 
-For quick image generation:
+### API Endpoints
 
+#### 1. Health Check
 ```bash
-python generate.py "a majestic lion in a grassy savanna, golden hour, photorealistic"
+GET /api/health
 ```
+Check API status and service availability.
 
-#### Command Line Options
-
+#### 2. Search Papers
 ```bash
-python generate.py "your prompt" --width 1024 --height 1024 --samples 2 --steps 30 --guidance 4.0 --negative-prompt "blurry, low quality"
+POST /api/search
+Content-Type: application/json
+
+{
+  "query": "Artificial Intelligence",
+  "num_results": 10,
+  "date_range": "year"
+}
 ```
 
-Available options:
-- `--width`: Image width in pixels (default: 1024)
-- `--height`: Image height in pixels (default: 1024)
-- `--samples`: Number of images to generate (default: 1)
-- `--steps`: Number of inference steps (default: 28)
-- `--guidance`: Guidance scale for prompt adherence (default: 3.5)
-- `--negative-prompt`: Things to avoid in the image
+#### 3. Scrape Abstracts
+```bash
+POST /api/scrape
+Content-Type: application/json
+
+[
+  {
+    "title": "Paper Title",
+    "link": "https://arxiv.org/abs/...",
+    "snippet": "...",
+    "publication_info": "...",
+    "cited_by": 100,
+    "year": 2024,
+    "authors": "..."
+  }
+]
+```
+
+#### 4. Generate Image
+```bash
+POST /api/generate-image
+Content-Type: application/json
+
+{
+  "title": "Paper Title",
+  "abstract": "Full abstract text...",
+  "width": 1024,
+  "height": 1024
+}
+```
+
+#### 5. Full Pipeline (Recommended)
+```bash
+POST /api/process
+Content-Type: application/json
+
+{
+  "query": "Machine Learning",
+  "num_papers": 5,
+  "date_range": "month",
+  "generate_images": true
+}
+```
+
+This endpoint runs the complete workflow:
+1. Searches Google Scholar
+2. Scrapes full abstracts
+3. Generates visualization images
+4. Returns processed papers with images
+
+#### 6. Get Last Result
+```bash
+GET /api/last-result
+```
+
+### Using Postman
+
+Import the provided `postman_collection.json` file into Postman:
+
+1. Open Postman
+2. Click "Import" → "Upload Files"
+3. Select `postman_collection.json`
+4. Set the `base_url` variable to `http://localhost:8000`
+5. Start testing the API!
 
 ## Examples
 
-### Basic Usage
-```bash
-python generate.py "a cute cat wearing a wizard hat"
+### Example 1: Quick Search
+```python
+import requests
+
+response = requests.post('http://localhost:8000/api/search', json={
+    "query": "Deep Learning",
+    "num_results": 5
+})
+
+papers = response.json()['papers']
+for paper in papers:
+    print(f"{paper['title']} - {paper['cited_by']} citations")
 ```
 
-### Advanced Usage
-```bash
-python generate.py "a futuristic cityscape at sunset" --width 1920 --height 1080 --samples 3 --negative-prompt "blurry, low resolution"
-```
+### Example 2: Full Pipeline
+```python
+import requests
 
-### Interactive Session
-```bash
-python image_generator.py
+response = requests.post('http://localhost:8000/api/process', json={
+    "query": "Transformer Architecture",
+    "num_papers": 3,
+    "generate_images": True
+})
+
+result = response.json()
+print(f"Processed {result['successful']}/{result['total_papers']} papers")
+
+for paper in result['papers']:
+    print(f"\nTitle: {paper['title']}")
+    print(f"Abstract: {paper['abstract'][:200]}...")
+    print(f"Images: {paper['image_paths']}")
 ```
-Then follow the prompts to enter your description and parameters.
 
 ## Output
 
-Generated images are saved in the `generated_images/` directory (or the directory specified in your `.env` file) with timestamps:
+Generated images are saved in the `output/` directory with timestamps:
 
 ```
-generated_images/
-├── generated_image_20241230_143022_1.png
-├── generated_image_20241230_143022_2.png
+output/
+├── generated_image_20251001_153022_1.png
+├── generated_image_20251001_153022_2.png
+├── last_result.json
 └── ...
 ```
 
@@ -117,45 +206,140 @@ generated_images/
 - ✅ Example template (`.env.example`) provided for setup
 - ✅ No hardcoded credentials in source code
 
-## File Structure
+## Project Structure
 
 ```
-webscrape/
-├── .env.example          # Template for environment variables
-├── .env                  # Your actual API keys (hidden from Git)
-├── .gitignore           # Git ignore file
-├── requirements.txt     # Python dependencies
-├── image_generator.py   # Main application (interactive)
-├── generate.py          # CLI script for quick generation
-├── README.md           # This file
-└── generated_images/   # Output directory for images
+ai-research-visualizer/
+├── backend/
+│   ├── __init__.py
+│   ├── app.py              # FastAPI application
+│   ├── models.py           # Pydantic models
+│   ├── serper_client.py    # Google Scholar search client
+│   ├── scenario_client.py  # Image generation client
+│   └── scraper.py          # Web scraping module
+├── output/                 # Generated images and results
+├── .env.example           # Environment variables template
+├── .env                   # Your API keys (gitignored)
+├── .gitignore
+├── requirements.txt       # Python dependencies
+├── postman_collection.json # Postman API collection
+└── README.md
 ```
 
 ## Troubleshooting
 
 ### "API credentials not found" Error
-- Make sure you've created a `.env` file
-- Check that your API key and secret are correctly set in the `.env` file
-- Ensure there are no extra spaces or quotes around the values
+- Ensure `.env` file exists in the project root
+- Verify all required API keys are set: `SERPER_API_KEY`, `SCENARIO_API_KEY`, `SCENARIO_API_SECRET`
+- No extra spaces or quotes around values
 
-### "Job failed" Error
-- Check your prompt for any restricted content
-- Verify your Scenario.com account has sufficient credits
-- Try reducing the image dimensions or number of samples
+### "ModuleNotFoundError" Error
+- Activate virtual environment: `.venv\Scripts\activate` (Windows) or `source .venv/bin/activate` (Unix)
+- Install dependencies: `pip install -r requirements.txt`
 
-### Network Errors
-- Check your internet connection
-- Verify the Scenario.com API is accessible
-- Try again after a few minutes (rate limiting)
+### Scraping Failures
+- Some sites block automated scraping
+- The system automatically falls back to Serper snippets
+- Check logs for specific error messages
 
-## API Model Information
+### Image Generation Timeout
+- Image generation can take 30-60 seconds per paper
+- Check Scenario.com account credits
+- Verify API key has generation permissions
 
-This app uses the `flux.1-dev` public model by default, which is a high-quality text-to-image model. You can modify the model in the code if you have access to other models in your Scenario.com account.
+### Rate Limiting
+- Serper: 2,500 searches/month on free tier
+- Scenario: Check your plan limits
+- Implement delays between requests if needed
+
+## Testing
+
+### Manual Testing
+1. Start the server: `python -m uvicorn backend.app:app --reload`
+2. Open browser: http://localhost:8000/api/docs
+3. Test each endpoint using the interactive Swagger UI
+
+### Using Postman
+1. Import `postman_collection.json`
+2. Test individual endpoints
+3. Run full pipeline test with `/api/process`
+
+### End-to-End Test
+```python
+# test_e2e.py
+import requests
+import time
+
+BASE_URL = "http://localhost:8000"
+
+# 1. Health check
+health = requests.get(f"{BASE_URL}/api/health")
+print(f"Health: {health.json()['status']}")
+
+# 2. Full pipeline
+response = requests.post(f"{BASE_URL}/api/process", json={
+    "query": "Attention Mechanism",
+    "num_papers": 2,
+    "generate_images": True
+})
+
+result = response.json()
+print(f"\nProcessed: {result['successful']}/{result['total_papers']} papers")
+
+for paper in result['papers']:
+    print(f"\n✓ {paper['title']}")
+    print(f"  Abstract source: {paper['abstract_source']}")
+    print(f"  Images: {len(paper['image_paths'])}")
+```
+
+## Architecture
+
+### Components
+1. **Serper Client**: Google Scholar search with retry logic
+2. **Web Scraper**: Multi-site abstract extraction with fallbacks
+3. **Scenario Client**: AI image generation with polling
+4. **FastAPI Backend**: RESTful API with validation
+5. **Pydantic Models**: Request/response validation
+
+### Workflow
+```
+Search Query → Serper API → Paper Results
+     ↓
+Paper URLs → Web Scraper → Full Abstracts
+     ↓
+Title + Abstract → Scenario API → Generated Images
+     ↓
+Complete Results → JSON Response + File Storage
+```
+
+## API Models
+
+### Image Generation
+- **Model**: `flux.1-dev` (high-quality text-to-image)
+- **Resolution**: 512-2048px (configurable)
+- **Scheduler**: EulerAncestralDiscreteScheduler
+- **Steps**: 28 (default)
+- **Guidance**: 3.5 (default)
 
 ## Contributing
 
-Feel free to submit issues or pull requests to improve this application!
+Contributions welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
 
 ## License
 
-This project is open source. Please check Scenario.com's terms of service for API usage restrictions.
+This project is open source. Please respect API providers' terms of service:
+- [Serper.dev Terms](https://serper.dev/terms)
+- [Scenario.com Terms](https://scenario.com/terms)
+
+## Credits
+
+Built with:
+- FastAPI
+- BeautifulSoup4
+- Tenacity
+- Pydantic
+- Requests
