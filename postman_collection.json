@@ -1,0 +1,132 @@
+{
+  "info": {
+    "name": "AI Research Paper Visualizer API",
+    "description": "Complete API collection for searching papers, scraping abstracts, and generating visualizations",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "ai-research-visualizer-001",
+    "version": "1.0.0"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/health",
+          "host": ["{{base_url}}"],
+          "path": ["api", "health"]
+        },
+        "description": "Check API health and service status"
+      }
+    },
+    {
+      "name": "Search Papers",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Artificial Intelligence\",\n  \"num_results\": 10,\n  \"date_range\": \"year\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/search",
+          "host": ["{{base_url}}"],
+          "path": ["api", "search"]
+        },
+        "description": "Search Google Scholar for research papers"
+      }
+    },
+    {
+      "name": "Scrape Abstracts",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "[\n  {\n    \"title\": \"Sample Paper\",\n    \"link\": \"https://arxiv.org/abs/1706.03762\",\n    \"snippet\": \"Transformer architecture...\",\n    \"publication_info\": \"NeurIPS 2017\",\n    \"cited_by\": 50000,\n    \"year\": 2017,\n    \"authors\": \"Vaswani et al.\"\n  }\n]"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/scrape",
+          "host": ["{{base_url}}"],
+          "path": ["api", "scrape"]
+        },
+        "description": "Scrape full abstracts from paper URLs"
+      }
+    },
+    {
+      "name": "Generate Image",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Attention Is All You Need\",\n  \"abstract\": \"The dominant sequence transduction models are based on complex recurrent or convolutional neural networks...\",\n  \"width\": 1024,\n  \"height\": 1024\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/generate-image",
+          "host": ["{{base_url}}"],
+          "path": ["api", "generate-image"]
+        },
+        "description": "Generate visualization image from paper title and abstract"
+      }
+    },
+    {
+      "name": "Process Papers (Full Pipeline)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Machine Learning\",\n  \"num_papers\": 5,\n  \"date_range\": \"month\",\n  \"generate_images\": true\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/process",
+          "host": ["{{base_url}}"],
+          "path": ["api", "process"]
+        },
+        "description": "Complete pipeline: Search → Scrape → Generate Images"
+      }
+    },
+    {
+      "name": "Get Last Result",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/last-result",
+          "host": ["{{base_url}}"],
+          "path": ["api", "last-result"]
+        },
+        "description": "Retrieve the last processed result"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    }
+  ]
+}
