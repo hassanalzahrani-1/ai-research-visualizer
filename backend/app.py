@@ -266,9 +266,12 @@ async def process_papers(request: ProcessPapersRequest):
             try:
                 image_paths = []
                 
+                # Get abstract text safely
+                abstract_text = paper.get('abstract') or paper.get('snippet', '')
+                
                 if request.generate_images:
                     scenario = get_scenario_client()
-                    prompt = f"Scientific visualization of: {paper['title']}. {paper.get('abstract', '')[:200]}"
+                    prompt = f"Scientific visualization of: {paper.get('title', 'Research Paper')}. {abstract_text[:200]}"
                     
                     image_paths = scenario.generate_image(
                         prompt=prompt,
@@ -278,9 +281,9 @@ async def process_papers(request: ProcessPapersRequest):
                     )
                 
                 processed_papers.append(ProcessedPaper(
-                    title=paper['title'],
-                    link=paper['link'],
-                    abstract=paper.get('abstract', paper.get('snippet', '')),
+                    title=paper.get('title', 'Unknown Title'),
+                    link=paper.get('link', ''),
+                    abstract=abstract_text,
                     abstract_source=paper.get('abstract_source', 'snippet'),
                     publication_info=paper.get('publication_info', 'N/A'),
                     cited_by=paper.get('cited_by', 0),
@@ -293,10 +296,12 @@ async def process_papers(request: ProcessPapersRequest):
                 
             except Exception as e:
                 logger.error(f"Error processing paper '{paper.get('title', 'Unknown')}': {e}")
+                # Get abstract safely for error case too
+                abstract_text = paper.get('abstract') or paper.get('snippet', '')
                 processed_papers.append(ProcessedPaper(
-                    title=paper['title'],
-                    link=paper['link'],
-                    abstract=paper.get('abstract', paper.get('snippet', '')),
+                    title=paper.get('title', 'Unknown Title'),
+                    link=paper.get('link', ''),
+                    abstract=abstract_text,
                     abstract_source=paper.get('abstract_source', 'snippet'),
                     publication_info=paper.get('publication_info', 'N/A'),
                     cited_by=paper.get('cited_by', 0),
