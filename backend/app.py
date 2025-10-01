@@ -182,7 +182,7 @@ async def scrape_abstracts(papers: List[PaperResponse]):
     Scrape full abstracts from paper URLs
     """
     try:
-        papers_dict = [paper.dict() for paper in papers]
+        papers_dict = [paper.model_dump() for paper in papers]
         scraped_papers = scraper.batch_scrape(papers_dict)
         
         return {
@@ -314,7 +314,7 @@ async def process_papers(request: ProcessPapersRequest):
         )
         
         # Save as last result
-        save_last_result(response.dict())
+        save_last_result(response.model_dump())
         
         return response
         
