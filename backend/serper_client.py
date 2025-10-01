@@ -155,11 +155,18 @@ class SerperClient:
         organic_results = response.get('organic', [])
         
         for result in organic_results:
+            # Handle publicationInfo which can be a dict or string
+            pub_info = result.get('publicationInfo', {})
+            if isinstance(pub_info, dict):
+                publication_info = pub_info.get('summary', 'N/A')
+            else:
+                publication_info = pub_info if pub_info else 'N/A'
+            
             paper = {
                 'title': result.get('title', 'N/A'),
                 'link': result.get('link', ''),
                 'snippet': result.get('snippet', ''),
-                'publication_info': result.get('publicationInfo', {}).get('summary', 'N/A'),
+                'publication_info': publication_info,
                 'cited_by': self._extract_citations(result),
                 'year': self._extract_year(result),
                 'authors': self._extract_authors(result)
@@ -182,19 +189,28 @@ class SerperClient:
     
     def _extract_year(self, result: Dict) -> Optional[int]:
         """Extract publication year from result"""
-        pub_info = result.get('publicationInfo', {}).get('summary', '')
+        pub_info = result.get('publicationInfo', {})
+        if isinstance(pub_info, dict):
+            pub_info_str = pub_info.get('summary', '')
+        else:
+            pub_info_str = pub_info if pub_info else ''
+        
         # Try to extract 4-digit year
         import re
-        year_match = re.search(r'\b(19|20)\d{2}\b', pub_info)
+        year_match = re.search(r'\b(19|20)\d{2}\b', pub_info_str)
         if year_match:
             return int(year_match.group())
         return None
     
     def _extract_authors(self, result: Dict) -> str:
         """Extract authors from result"""
-        pub_info = result.get('publicationInfo', {}).get('summary', '')
+        pub_info = result.get('publicationInfo', {})
+        if isinstance(pub_info, dict):
+            pub_info_str = pub_info.get('summary', '')
+        else:
+            pub_info_str = pub_info if pub_info else ''
         # Authors are typically before the year
-        parts = pub_info.split('-')
+        parts = pub_info_str.split('-')
         if parts:
             return parts[0].strip()
         return 'N/A'
