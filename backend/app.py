@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="AI Research Paper Visualizer API",
+    title="AI Research Visualizer API",
     description="Search Google Scholar, scrape abstracts, and generate visual representations of research papers",
     version="1.0.0",
     docs_url="/api/docs",
