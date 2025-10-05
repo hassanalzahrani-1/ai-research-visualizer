@@ -4,9 +4,9 @@ Implements error handling and retry logic with exponential backoff
 """
 
 import os
+import re
 import logging
 from typing import Dict, List, Optional
-from datetime import datetime, timedelta
 import requests
 from tenacity import (
     retry,
@@ -19,8 +19,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Get logger (don't configure - let app.py handle it)
 logger = logging.getLogger(__name__)
 
 
@@ -33,6 +32,18 @@ class SerperClient:
     """Client for interacting with Serper API for Google Scholar searches"""
     
     BASE_URL = "https://google.serper.dev/scholar"
+    
+    # Translation table for cleaning snippets (created once)
+    _SNIPPET_TRANSLATION = str.maketrans({
+        '…': ' ',
+        '\u2026': ' ',  # Unicode ellipsis
+        '\u2019': "'",  # Right single quotation mark
+        '\u2018': "'",  # Left single quotation mark
+        '\u201c': '"',  # Left double quotation mark
+        '\u201d': '"',  # Right double quotation mark
+        '\u2013': '-',  # En dash
+        '\u2014': '-',  # Em dash
+    })
     
     def __init__(self, api_key: Optional[str] = None):
         """
@@ -93,8 +104,7 @@ class SerperClient:
     def search_scholar(
         self,
         query: str,
-        num_results: int = 10,
-        date_range: Optional[str] = None
+        num_results: int = 10
     ) -> List[Dict]:
         """
         Search Google Scholar for research papers
@@ -102,41 +112,44 @@ class SerperClient:
         Args:
             query: Search query (e.g., "Artificial Intelligence")
             num_results: Number of results to return (default: 10)
-            date_range: Date range filter - 'week', 'month', 'year', or None
             
         Returns:
             List of paper dictionaries with keys:
                 - title: Paper title
                 - link: URL to paper
                 - snippet: Abstract snippet
-                - publication_info: Journal/conference info
-                - cited_by: Citation count
                 - year: Publication year
                 
         Raises:
             SerperAPIError: If search fails
         """
+        # Use Google Scholar's 'as_ylo' parameter to filter by year
+        # as_ylo = "as year low" - minimum year for results
+        min_year = 2025
+        
+        # Add site restrictions to only get papers from scrapable sources
+        site_filter = "(site:arxiv.org OR site:pubmed.ncbi.nlm.nih.gov OR site:researchgate.net)"
+        enhanced_query = f"{site_filter} {query}"
+        
         payload = {
-            'q': query,
-            'num': num_results
+            'q': enhanced_query,
+            'num': num_results * 2,  # Request extra to ensure enough results
+            'page': 1,
+            'gl': 'us',  # Country - US for English results
+            'hl': 'en',  # Language - English
+            'as_ylo': min_year  # Filter for papers from 2025 onwards
         }
         
-        # Add date range if specified
-        if date_range:
-            date_filters = {
-                'week': 'w',
-                'month': 'm',
-                'year': 'y'
-            }
-            if date_range.lower() in date_filters:
-                payload['tbs'] = f"qdr:{date_filters[date_range.lower()]}"
+        logger.info(f"Searching for papers from {min_year} onwards")
         
         try:
+            # Make API request
             response = self._make_request(payload)
+            
+            # Parse response
             papers = self._parse_response(response)
             
-            # Sort by year (most recent first), then by citations
-            papers.sort(key=lambda x: (x.get('year') or 0, x.get('cited_by', 0)), reverse=True)
+            logger.info(f"Retrieved {len(papers)} papers from API")
             
             # Limit to requested number of results
             papers = papers[:num_results]
@@ -162,37 +175,34 @@ class SerperClient:
         organic_results = response.get('organic', [])
         
         for result in organic_results:
-            # Handle publicationInfo which can be a dict or string
-            pub_info = result.get('publicationInfo', {})
-            if isinstance(pub_info, dict):
-                publication_info = pub_info.get('summary', 'N/A')
-            else:
-                publication_info = pub_info if pub_info else 'N/A'
+            # Get ONLY the basic snippet (no highlighted or rich snippets)
+            # This prevents user query terms from contaminating the paper data
+            snippet = result.get('snippet', '')
+            
+            # Clean up snippet - remove ellipses and extra spaces
+            snippet = self._clean_snippet(snippet)
             
             paper = {
-                'title': result.get('title', 'N/A'),
+                'title': self._clean_snippet(result.get('title', 'N/A')),
                 'link': result.get('link', ''),
-                'snippet': result.get('snippet', ''),
-                'publication_info': publication_info,
-                'cited_by': self._extract_citations(result),
+                'snippet': snippet,
                 'year': self._extract_year(result),
-                'authors': self._extract_authors(result)
             }
             papers.append(paper)
         
         return papers
     
-    def _extract_citations(self, result: Dict) -> int:
-        """Extract citation count from result"""
-        inline_links = result.get('inlineLinks', [])
-        for link in inline_links:
-            if 'Cited by' in link.get('title', ''):
-                # Extract number from "Cited by 123"
-                try:
-                    return int(''.join(filter(str.isdigit, link.get('title', '0'))))
-                except ValueError:
-                    return 0
-        return 0
+    def _clean_snippet(self, snippet: str) -> str:
+        """Clean snippet text by removing ellipses, unicode characters, and extra spaces"""
+        if not snippet:
+            return snippet
+        
+        # Use pre-built translation table for faster processing
+        snippet = snippet.translate(self._SNIPPET_TRANSLATION)
+        snippet = snippet.replace('...', ' ')  # Regular ellipsis
+        
+        # Remove extra whitespace and return
+        return ' '.join(snippet.split())
     
     def _extract_year(self, result: Dict) -> Optional[int]:
         """Extract publication year from result"""
@@ -203,42 +213,24 @@ class SerperClient:
             pub_info_str = pub_info if pub_info else ''
         
         # Try to extract 4-digit year
-        import re
         year_match = re.search(r'\b(19|20)\d{2}\b', pub_info_str)
         if year_match:
             return int(year_match.group())
         return None
     
-    def _extract_authors(self, result: Dict) -> str:
-        """Extract authors from result"""
-        pub_info = result.get('publicationInfo', {})
-        if isinstance(pub_info, dict):
-            pub_info_str = pub_info.get('summary', '')
-        else:
-            pub_info_str = pub_info if pub_info else ''
-        # Authors are typically before the year
-        parts = pub_info_str.split('-')
-        if parts:
-            return parts[0].strip()
-        return 'N/A'
-
-
 # Example usage
 if __name__ == "__main__":
     try:
         client = SerperClient()
         papers = client.search_scholar(
             query="Artificial Intelligence",
-            num_results=5,
-            date_range="month"
+            num_results=5
         )
         
         print(f"\nFound {len(papers)} papers:\n")
         for i, paper in enumerate(papers, 1):
             print(f"{i}. {paper['title']}")
-            print(f"   Authors: {paper['authors']}")
             print(f"   Year: {paper['year']}")
-            print(f"   Citations: {paper['cited_by']}")
             print(f"   Link: {paper['link']}")
             print(f"   Snippet: {paper['snippet'][:100]}...")
             print()
