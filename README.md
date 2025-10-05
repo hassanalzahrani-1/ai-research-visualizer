@@ -5,6 +5,10 @@
 
 An intelligent system that searches academic papers, scrapes full abstracts, and generates AI-powered visual representations. Built with React, FastAPI, Serper API (Google Scholar search), web scraping, and Scenario API (AI image generation).
 
+## Demo
+
+![Demo](Demo.gif)
+
 ## ✨ Features
 
 - 🔍 **Smart Search**: Google Scholar search with 2025+ date filtering and site restrictions
@@ -16,10 +20,6 @@ An intelligent system that searches academic papers, scrapes full abstracts, and
 - 🔄 **Progressive Loading**: Images generate asynchronously for fast initial response
 - 🛡️ **Robust Error Handling**: Retry logic with exponential backoff on all API calls
 - 📊 **Postman Collection**: Pre-configured API testing collection
-
-## Demo
-
-![Demo](Demo.gif)
 
 ## Setup
 
