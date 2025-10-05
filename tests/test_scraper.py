@@ -9,32 +9,39 @@ from backend.scraper import PaperScraper
 def test_scraper_initialization():
     """Test scraper initialization"""
     scraper = PaperScraper()
-    assert scraper.timeout == 10
-    assert 'User-Agent' in scraper.headers
+    assert 'User-Agent' in scraper.HEADERS
 
 
-def test_scraper_custom_timeout():
-    """Test scraper with custom timeout"""
-    scraper = PaperScraper(timeout=20)
-    assert scraper.timeout == 20
-
-
-def test_scrape_abstract_with_fallback():
-    """Test scraping with fallback to snippet"""
+def test_scrape_paper_no_url():
+    """Test scraping with no URL"""
     scraper = PaperScraper()
     
-    # Invalid URL should fall back to snippet
-    result = scraper.scrape_abstract(
-        url="https://invalid-url-that-does-not-exist.com",
-        fallback_snippet="This is a fallback snippet"
-    )
+    paper = {
+        'title': 'Test Paper',
+        'link': '',
+        'snippet': 'Test snippet'
+    }
     
-    assert result['abstract'] == "This is a fallback snippet"
-    assert result['source'] == 'snippet'
-    assert result['success'] is False
+    result = scraper.scrape_paper(paper)
+    assert result['abstract'] is None
 
 
-def test_batch_scrape():
+def test_scrape_paper_invalid_url():
+    """Test scraping with invalid URL"""
+    scraper = PaperScraper()
+    
+    paper = {
+        'title': 'Test Paper',
+        'link': 'https://invalid-url-that-does-not-exist.com',
+        'snippet': 'Test snippet'
+    }
+    
+    result = scraper.scrape_paper(paper)
+    # Should return None for abstract (no fallback)
+    assert result['abstract'] is None
+
+
+def test_scrape_papers_batch():
     """Test batch scraping"""
     scraper = PaperScraper()
     
@@ -51,44 +58,64 @@ def test_batch_scrape():
         }
     ]
     
-    result = scraper.batch_scrape(papers)
+    result = scraper.scrape_papers(papers)
     
     assert len(result) == 2
     assert all('abstract' in paper for paper in result)
-    assert all('abstract_source' in paper for paper in result)
-    assert all('scrape_success' in paper for paper in result)
+    # All should be None since URLs are invalid
+    assert all(paper['abstract'] is None for paper in result)
 
 
-def test_scrape_arxiv_url_structure():
-    """Test that arXiv URLs are recognized"""
-    scraper = PaperScraper()
-    
-    # This will likely fail to scrape but should try the arXiv scraper
-    result = scraper.scrape_abstract(
-        url="https://arxiv.org/abs/9999.99999",  # Invalid paper ID
-        fallback_snippet="Fallback"
-    )
-    
-    # Should fall back to snippet since paper doesn't exist
-    assert result['source'] == 'snippet'
-
-
-def test_batch_scrape_empty_list():
+def test_scrape_papers_empty_list():
     """Test batch scraping with empty list"""
     scraper = PaperScraper()
-    result = scraper.batch_scrape([])
+    result = scraper.scrape_papers([])
     assert result == []
 
 
-def test_scrape_abstract_short_text():
-    """Test that short abstracts trigger fallback"""
+def test_scrape_generic_method():
+    """Test generic scraper method exists"""
+    scraper = PaperScraper()
+    # Should have scrape_generic method
+    assert hasattr(scraper, 'scrape_generic')
+    assert callable(scraper.scrape_generic)
+
+
+def test_scraper_saves_results_to_file():
+    """Test that scraper saves results to JSON file"""
+    import os
     scraper = PaperScraper()
     
-    # Even if we get content, if it's too short, should use fallback
-    result = scraper.scrape_abstract(
-        url="https://example.com",
-        fallback_snippet="This is a longer fallback snippet that should be used"
-    )
+    papers = [
+        {
+            'title': 'Test Paper',
+            'link': 'https://example.com',
+            'snippet': 'Test snippet'
+        }
+    ]
     
-    # Should use fallback
-    assert result['source'] == 'snippet'
+    try:
+        # Run scraper with save_results=True
+        scraper.scrape_papers(papers, save_results=True)
+        
+        # Check if file was created
+        assert os.path.exists('scraper_results.json')
+    finally:
+        # Always clean up, even if test fails
+        if os.path.exists('scraper_results.json'):
+            os.remove('scraper_results.json')
+
+
+def test_scraper_handles_arxiv_urls():
+    """Test that scraper recognizes arXiv URLs"""
+    scraper = PaperScraper()
+    
+    paper = {
+        'title': 'Test arXiv Paper',
+        'link': 'https://arxiv.org/abs/1234.5678',
+        'snippet': 'Test snippet'
+    }
+    
+    result = scraper.scrape_paper(paper)
+    # Should attempt to scrape (will fail for fake ID, but that's ok)
+    assert 'abstract' in result

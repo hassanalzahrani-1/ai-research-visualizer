@@ -8,8 +8,6 @@ import time
 import base64
 import logging
 from typing import Dict, List, Optional
-from datetime import datetime
-from pathlib import Path
 import requests
 from tenacity import (
     retry,
@@ -22,8 +20,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Get logger (don't configure - let app.py handle it)
 logger = logging.getLogger(__name__)
 
 
@@ -31,30 +28,24 @@ class ScenarioAPIError(Exception):
     """Custom exception for Scenario API errors"""
     pass
 
-
 class ScenarioClient:
     """Client for interacting with Scenario.com API for image generation"""
     
     BASE_URL = 'https://api.cloud.scenario.com/v1'
     
-    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None, output_dir: str = 'output'):
+    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None):
         """
         Initialize Scenario API client
         
         Args:
             api_key: Scenario API key (defaults to SCENARIO_API_KEY env var)
             api_secret: Scenario API secret (defaults to SCENARIO_API_SECRET env var)
-            output_dir: Directory to save generated images
         """
         self.api_key = api_key or os.getenv('SCENARIO_API_KEY')
         self.api_secret = api_secret or os.getenv('SCENARIO_API_SECRET', '')
-        self.output_dir = output_dir
         
         if not self.api_key:
             raise ValueError("SCENARIO_API_KEY not found in environment variables")
-        
-        # Create output directory if it doesn't exist
-        Path(self.output_dir).mkdir(exist_ok=True)
         
         # Create authorization header
         auth_string = f"{self.api_key}:{self.api_secret}"
@@ -171,24 +162,23 @@ class ScenarioClient:
             
             logger.info(f"Job created successfully! Job ID: {job_id}")
             
-            # Poll for completion and download images
-            return self._poll_and_download(job_id)
+            # Poll for completion and get image URLs
+            return self._poll_and_get_urls(job_id)
             
         except ScenarioAPIError as e:
             logger.error(f"Image generation failed: {e}")
             raise
     
-    def _poll_and_download(self, job_id: str, max_attempts: int = 60, poll_interval: int = 5) -> List[str]:
+    def _poll_and_get_urls(self, job_id: str, max_attempts: int = 60) -> List[str]:
         """
-        Poll job status until completion and download images
+        Poll job status until completion with adaptive polling intervals
         
         Args:
             job_id: Job ID to poll
-            max_attempts: Maximum polling attempts (default: 60 = 5 minutes)
-            poll_interval: Seconds between polls
+            max_attempts: Maximum polling attempts (default: 60)
             
         Returns:
-            List of downloaded image file paths
+            List of image URLs
             
         Raises:
             ScenarioAPIError: If job fails or times out
@@ -205,7 +195,7 @@ class ScenarioClient:
                 
                 if status == 'success':
                     logger.info("Job completed successfully!")
-                    return self._download_images(job_data)
+                    return self._extract_image_urls(job_data)
                     
                 elif status == 'failure':
                     error_msg = job_info.get('error', 'Unknown error')
@@ -215,7 +205,16 @@ class ScenarioClient:
                     progress = job_info.get('progress', 0)
                     logger.info(f"Job {status} - Progress: {progress*100:.1f}%")
                 
-                time.sleep(poll_interval)
+                # Adaptive polling: fast at first, then slower
+                # First 10s: check every 2s (attempts 0-4)
+                # Next 30s: check every 3s (attempts 5-14)
+                # After 40s: check every 5s (attempts 15+)
+                if attempt < 5:
+                    time.sleep(2)
+                elif attempt < 15:
+                    time.sleep(3)
+                else:
+                    time.sleep(5)
                 
             except ScenarioAPIError:
                 raise
@@ -224,99 +223,61 @@ class ScenarioClient:
                 if attempt == max_attempts - 1:
                     raise ScenarioAPIError(f"Polling failed: {e}")
         
-        raise ScenarioAPIError(f"Job timeout after {max_attempts * poll_interval} seconds")
+        raise ScenarioAPIError(f"Job timeout after 5 minutes")
     
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(requests.RequestException),
-        reraise=True
-    )
-    def _download_image(self, url: str, filepath: Path) -> None:
+    def _extract_image_urls(self, job_data: Dict) -> List[str]:
         """
-        Download a single image with retry logic
-        
-        Args:
-            url: Image URL
-            filepath: Destination file path
-            
-        Raises:
-            requests.RequestException: If download fails after retries
-        """
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        
-        with open(filepath, 'wb') as f:
-            f.write(response.content)
-        
-        logger.info(f"Downloaded: {filepath}")
-    
-    def _download_images(self, job_data: Dict) -> List[str]:
-        """
-        Download generated images from job data
+        Extract image URLs from job data, checking multiple possible locations
         
         Args:
             job_data: Job data containing image information
             
         Returns:
-            List of downloaded image file paths
-            
-        Raises:
-            ScenarioAPIError: If no images found or download fails
+            List of image URLs
         """
-        try:
-            job_info = job_data.get('job', {})
-            asset_ids = job_info.get('metadata', {}).get('assetIds', [])
-            
-            if not asset_ids:
-                raise ScenarioAPIError("No images found in job data")
-            
-            downloaded_files = []
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
-            for i, asset_id in enumerate(asset_ids):
-                try:
-                    # Get asset information
-                    asset_data = self._make_request('GET', f'assets/{asset_id}')
+        urls = []
+        job_info = job_data.get('job', {})
+        
+        # Try to get URLs directly from job response first (faster)
+        # Check if URLs are already in the response
+        direct_urls = job_info.get('images', []) or job_info.get('urls', [])
+        if direct_urls:
+            logger.info(f"Found {len(direct_urls)} URLs directly in job response")
+            return [url if isinstance(url, str) else url.get('url', '') for url in direct_urls]
+        
+        # Fallback: Fetch asset URLs (slower but more reliable)
+        metadata = job_info.get('metadata', {})
+        asset_ids = metadata.get('assetIds', [])
+        
+        if not asset_ids:
+            logger.warning("No asset IDs found in job response")
+            return []
+        
+        logger.info(f"Fetching URLs for {len(asset_ids)} assets")
+        
+        # Fetch each asset to get its URL
+        for asset_id in asset_ids:
+            try:
+                asset_data = self._make_request('GET', f'assets/{asset_id}')
+                asset_info = asset_data.get('asset', {})
+                url = asset_info.get('url', '')
+                
+                if url:
+                    urls.append(url)
+                    logger.info(f"Found image URL from asset {asset_id}")
+                else:
+                    logger.warning(f"No URL found for asset {asset_id}")
                     
-                    # Find image URL
-                    image_url = (
-                        asset_data.get('url') or 
-                        asset_data.get('downloadUrl') or 
-                        asset_data.get('asset', {}).get('url')
-                    )
-                    
-                    if not image_url:
-                        logger.warning(f"No download URL found for asset {asset_id}")
-                        continue
-                    
-                    # Download image
-                    filename = f"generated_image_{timestamp}_{i+1}.png"
-                    filepath = Path(self.output_dir) / filename
-                    
-                    self._download_image(image_url, filepath)
-                    downloaded_files.append(str(filepath))
-                    
-                except Exception as e:
-                    logger.error(f"Error downloading image {i+1}: {e}")
-                    continue
-            
-            if not downloaded_files:
-                raise ScenarioAPIError("Failed to download any images")
-            
-            return downloaded_files
-            
-        except ScenarioAPIError:
-            raise
-        except Exception as e:
-            raise ScenarioAPIError(f"Error processing images: {e}")
-
+            except Exception as e:
+                logger.error(f"Error fetching asset {asset_id}: {e}")
+        
+        return urls
+    
 
 # Example usage
 if __name__ == "__main__":
     try:
         client = ScenarioClient()
-        
         prompt = "A futuristic AI research laboratory with holographic displays showing neural networks"
         
         images = client.generate_image(

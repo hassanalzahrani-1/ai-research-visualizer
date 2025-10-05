@@ -9,24 +9,13 @@ from backend.app import app
 client = TestClient(app)
 
 
-def test_health_check():
-    """Test health check endpoint"""
-    response = client.get("/api/health")
-    assert response.status_code == 200
-    data = response.json()
-    assert "status" in data
-    assert "version" in data
-    assert "services" in data
-
-
-def test_search_papers_valid():
-    """Test search endpoint with valid data"""
+def test_process_papers_valid():
+    """Test process endpoint with valid data"""
     response = client.post(
-        "/api/search",
+        "/api/process",
         json={
             "query": "Machine Learning",
-            "num_results": 5,
-            "date_range": "year"
+            "num_papers": 5
         }
     )
     # May fail if API keys not configured, so check for either success, 503, or 500
@@ -37,63 +26,48 @@ def test_search_papers_valid():
         assert "query" in data
         assert "papers" in data
         assert data["query"] == "Machine Learning"
+        # Check that papers have the correct structure
+        if len(data["papers"]) > 0:
+            paper = data["papers"][0]
+            assert "title" in paper
+            assert "link" in paper
+            assert "snippet" in paper
+            assert "year" in paper
+            assert "abstract" in paper  # May be None
+            assert "image_urls" in paper
 
 
-def test_search_papers_invalid():
-    """Test search endpoint with invalid data"""
+def test_process_papers_invalid():
+    """Test process endpoint with invalid data"""
     response = client.post(
-        "/api/search",
+        "/api/process",
         json={
-            "num_results": 5
+            "num_papers": 5
             # Missing required 'query' field
         }
     )
     assert response.status_code == 422  # Validation error
-
-
-def test_scrape_endpoint():
-    """Test scrape endpoint"""
-    papers = [
-        {
-            "title": "Test Paper",
-            "link": "https://arxiv.org/abs/1706.03762",
-            "snippet": "Test snippet",
-            "publication_info": "Test",
-            "cited_by": 0,
-            "year": 2024,
-            "authors": "Test Author"
-        }
-    ]
     
-    response = client.post("/api/scrape", json=papers)
-    assert response.status_code == 200
-    data = response.json()
-    assert "total" in data
-    assert "papers" in data
-    assert data["total"] == 1
-
-
 def test_generate_image_endpoint():
     """Test image generation endpoint"""
     response = client.post(
         "/api/generate-image",
         json={
-            "title": "Test Paper",
-            "abstract": "This is a test abstract for image generation.",
-            "width": 512,
-            "height": 512
+            "paper": {
+                "title": "Test Paper",
+                "link": "https://example.com",
+                "snippet": "This is a test abstract for image generation.",
+                "year": 2024,
+                "abstract": None,
+                "image_urls": []
+            }
         }
     )
     # May fail if API keys not configured
-    assert response.status_code in [200, 500, 503]
-
-
-def test_last_result_not_found():
-    """Test last result endpoint when no results exist"""
-    # This might return 404 or 200 depending on whether previous tests ran
-    response = client.get("/api/last-result")
-    assert response.status_code in [200, 404]
-
+    assert response.status_code == 200  # Should always return 200 with success=false on error
+    data = response.json()
+    assert "success" in data
+    assert "image_urls" in data
 
 def test_process_endpoint_validation():
     """Test full pipeline endpoint validation"""
@@ -109,7 +83,7 @@ def test_process_endpoint_validation():
 
 def test_cors_headers():
     """Test CORS headers are present"""
-    response = client.options("/api/health")
+    response = client.options("/api/process")
     # CORS middleware should add headers
     assert response.status_code in [200, 405]
 
@@ -120,30 +94,42 @@ def test_api_docs():
     assert response.status_code == 200
 
 
-def test_search_with_different_date_ranges():
-    """Test search with various date range options"""
-    date_ranges = ["week", "month", "year", ""]
-    
-    for date_range in date_ranges:
+def test_process_with_different_paper_counts():
+    """Test process with various paper counts"""
+    for num_papers in [1, 5, 10]:
         response = client.post(
-            "/api/search",
-            json={
-                "query": "AI",
-                "num_results": 3,
-                "date_range": date_range
-            }
-        )
-        assert response.status_code in [200, 500, 503]
-
-
-def test_search_with_different_result_counts():
-    """Test search with various result counts"""
-    for num_results in [1, 5, 10]:
-        response = client.post(
-            "/api/search",
+            "/api/process",
             json={
                 "query": "Deep Learning",
-                "num_results": num_results
+                "num_papers": num_papers
             }
         )
         assert response.status_code in [200, 500, 503]
+
+
+def test_health_endpoint():
+    """Test health check endpoint"""
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert "status" in data
+
+
+def test_process_returns_abstract_field():
+    """Test that process endpoint returns abstract field"""
+    response = client.post(
+        "/api/process",
+        json={
+            "query": "artificial intelligence",
+            "num_papers": 2
+        }
+    )
+    
+    if response.status_code == 200:
+        data = response.json()
+        if len(data["papers"]) > 0:
+            paper = data["papers"][0]
+            # Abstract field should exist (may be None if scraping failed)
+            assert "abstract" in paper
+            # Should not have abstract_source anymore
+            assert "abstract_source" not in paper

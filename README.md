@@ -1,16 +1,17 @@
 # AI Research Paper Visualizer
 
-An intelligent system that searches academic papers, extracts abstracts, and generates visual representations using AI. Combines Google Scholar search (via Serper API), web scraping, and AI image generation (via Scenario API) into a unified FastAPI backend.
+An intelligent system that searches academic papers, scrapes full abstracts, and generates AI-powered visual representations. Built with React, FastAPI, Serper API (Google Scholar search), web scraping, and Scenario API (AI image generation).
 
-## Features
+## ✨ Features
 
-- 🔍 **Google Scholar Search**: Search academic papers with date filtering
-- 📄 **Smart Web Scraping**: Extract full abstracts from arXiv, IEEE, PubMed, ACM, Springer, and more
-- 🎨 **AI Image Generation**: Create visual representations of research papers
-- 🚀 **FastAPI Backend**: RESTful API with automatic documentation
-- 🔄 **Full Pipeline**: End-to-end workflow from search to visualization
-- 🛡️ **Robust Error Handling**: Retry logic and graceful fallbacks
-- 📊 **Postman Collection**: Ready-to-use API testing collection
+- 🔍 **Smart Search**: Google Scholar search with 2025+ date filtering and site restrictions
+- 📄 **Web Scraping**: Extracts full abstracts from arXiv, PubMed, and ResearchGate
+- 🎨 **AI Image Generation**: Creates visual representations using Scenario's Flux.1-dev model
+- 🖼️ **Interactive UI**: Modern React frontend with bento grid layout and modal details view
+- 🚀 **FastAPI Backend**: RESTful API with automatic Swagger documentation
+- 🔄 **Progressive Loading**: Images generate asynchronously for fast initial response
+- 🛡️ **Robust Error Handling**: Retry logic with exponential backoff on all API calls
+- 📊 **Postman Collection**: Pre-configured API testing collection included
 
 ## Setup
 
@@ -87,73 +88,68 @@ The API will be available at `http://localhost:8000`
 
 ### API Endpoints
 
-#### 1. Health Check
-```bash
-GET /api/health
-```
-Check API status and service availability.
-
-#### 2. Search Papers
-```bash
-POST /api/search
-Content-Type: application/json
-
-{
-  "query": "Artificial Intelligence",
-  "num_results": 10,
-  "date_range": "year"
-}
-```
-
-#### 3. Scrape Abstracts
-```bash
-POST /api/scrape
-Content-Type: application/json
-
-[
-  {
-    "title": "Paper Title",
-    "link": "https://arxiv.org/abs/...",
-    "snippet": "...",
-    "publication_info": "...",
-    "cited_by": 100,
-    "year": 2024,
-    "authors": "..."
-  }
-]
-```
-
-#### 4. Generate Image
-```bash
-POST /api/generate-image
-Content-Type: application/json
-
-{
-  "title": "Paper Title",
-  "abstract": "Full abstract text...",
-  "width": 1024,
-  "height": 1024
-}
-```
-
-#### 5. Full Pipeline (Recommended)
+#### 1. Process Papers (Main Endpoint)
 ```bash
 POST /api/process
 Content-Type: application/json
 
 {
-  "query": "Machine Learning",
-  "num_papers": 5,
-  "date_range": "month",
-  "generate_images": true
+  "query": "artificial intelligence",
+  "num_papers": 5
 }
 ```
 
-This endpoint runs the complete workflow:
-1. Searches Google Scholar
-2. Scrapes full abstracts
-3. Generates visualization images
-4. Returns processed papers with images
+**Response:**
+```json
+{
+  "query": "artificial intelligence",
+  "papers": [
+    {
+      "title": "Paper Title",
+      "link": "https://arxiv.org/abs/...",
+      "snippet": "Short description...",
+      "year": 2025,
+      "abstract": "Full scraped abstract (1500+ chars)...",
+      "image_urls": []  // Populated progressively by frontend
+    }
+  ]
+}
+```
+
+**Workflow:**
+1. Searches Google Scholar (2025+ papers from arXiv/PubMed/ResearchGate)
+2. Scrapes full abstracts from paper URLs
+3. Returns papers immediately (fast response)
+4. Frontend progressively loads images via `/api/generate-image`
+
+#### 2. Generate Image
+```bash
+POST /api/generate-image
+Content-Type: application/json
+
+{
+  "paper": {
+    "title": "Paper Title",
+    "snippet": "...",
+    "abstract": "Full abstract...",
+    "year": 2025
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "image_urls": ["https://cdn.scenario.com/..."],
+  "success": true
+}
+```
+
+#### 3. Health Check
+```bash
+GET /api/health
+```
+Returns API status and service availability.
 
 #### 6. Get Last Result
 ```bash
@@ -239,13 +235,14 @@ ai-research-visualizer/
 │   ├── public/             # Static assets
 │   ├── src/
 │   │   ├── components/     # React components
-│   │   │   ├── SearchForm.js
-│   │   │   ├── ResultsDisplay.js
-│   │   │   └── ImageGallery.js
+│   │   │   ├── MagicBento.js      # Bento grid layout
+│   │   │   ├── PaperModal.js      # Paper details modal
+│   │   │   ├── AnimatedContent.js # Animation wrapper
+│   │   │   └── SearchForm.js      # Search input
 │   │   ├── App.js          # Main app component
 │   │   └── index.js        # Entry point
 │   ├── package.json        # Node dependencies
-│   └── .env.example        # Frontend environment template
+│   └── .env                # Frontend environment (gitignored)
 ├── tests/
 │   ├── test_api.py         # API endpoint tests
 │   ├── test_serper_client.py
@@ -273,9 +270,9 @@ ai-research-visualizer/
 - Install dependencies: `pip install -r requirements.txt`
 
 ### Scraping Failures
-- Some sites block automated scraping
-- The system automatically falls back to Serper snippets
-- Check logs for specific error messages
+- Site filter restricts to arXiv, PubMed, and ResearchGate (scrapable sources)
+- If scraping fails, `abstract` field will be `null` (frontend uses snippet as fallback)
+- Check `scraper_results.json` for detailed scraping logs
 
 ### Image Generation Timeout
 - Image generation can take 30-60 seconds per paper
@@ -345,32 +342,41 @@ This will test:
 ## Architecture
 
 ### Components
-1. **React Frontend**: Modern web interface with search, results, and gallery
-2. **Serper Client**: Google Scholar search with retry logic
-3. **Web Scraper**: Multi-site abstract extraction with fallbacks
-4. **Scenario Client**: AI image generation with polling
-5. **FastAPI Backend**: RESTful API with validation
-6. **Pydantic Models**: Request/response validation
+1. **React Frontend**: Bento grid layout with modal details view, progressive image loading
+2. **Serper Client**: Google Scholar search with site filtering and retry logic
+3. **Web Scraper**: Extracts abstracts from arXiv, PubMed, ResearchGate (BeautifulSoup4)
+4. **Scenario Client**: AI image generation with Flux.1-dev model
+5. **FastAPI Backend**: RESTful API with Pydantic validation
+6. **Error Handling**: Exponential backoff retry logic on all external API calls
 
 ### Workflow
 ```
-Search Query → Serper API → Paper Results
-     ↓
-Paper URLs → Web Scraper → Full Abstracts
-     ↓
-Title + Abstract → Scenario API → Generated Images
-     ↓
-Complete Results → JSON Response + File Storage
+1. User searches → Serper API (filtered: arXiv/PubMed/ResearchGate, 2025+)
+2. Get paper URLs → Web Scraper extracts full abstracts
+3. Return papers immediately (fast response)
+4. Frontend progressively calls /api/generate-image for each paper
+5. Scenario API generates images (30-60s each)
+6. Images appear as they complete
 ```
 
-## API Models
+### Key Features
+- **Site Filtering**: `(site:arxiv.org OR site:pubmed.ncbi.nlm.nih.gov OR site:researchgate.net)`
+- **Progressive Loading**: Papers load instantly, images generate asynchronously
+- **Abstract Truncation**: Full abstracts stored, but truncated to 500 chars for image prompts (faster generation)
+- **Modal View**: Click any card to see full abstract and large image
+
+## Technical Details
 
 ### Image Generation
-- **Model**: `flux.1-dev` (high-quality text-to-image)
-- **Resolution**: 512-2048px (configurable)
-- **Scheduler**: EulerAncestralDiscreteScheduler
-- **Steps**: 28 (default)
-- **Guidance**: 3.5 (default)
+- **Model**: Scenario Flux.1-dev (high-quality text-to-image)
+- **Resolution**: 1024x1024px
+- **Prompt**: Full paper JSON (title, snippet, abstract, year)
+- **Generation Time**: 30-60 seconds per image
+
+### Web Scraping
+- **Priority**: HTML class/ID selectors → Meta tags → Fallback to snippet
+- **Retry Logic**: 2 attempts with exponential backoff
+- **Success Rate**: ~100% for arXiv/PubMed, varies for ResearchGate
 
 ## Contributing
 
@@ -386,11 +392,20 @@ This project is open source. Please respect API providers' terms of service:
 - [Serper.dev Terms](https://serper.dev/terms)
 - [Scenario.com Terms](https://scenario.com/terms)
 
-## Credits
+## Technologies
 
-Built with:
-- FastAPI
-- BeautifulSoup4
-- Tenacity
-- Pydantic
-- Requests
+**Backend:**
+- FastAPI - RESTful API framework
+- BeautifulSoup4 - HTML parsing for web scraping
+- Tenacity - Retry logic with exponential backoff
+- Pydantic - Data validation
+- Requests - HTTP client
+
+**Frontend:**
+- React - UI framework
+- GSAP - Animations
+- CSS3 - Styling with glassmorphism effects
+
+**APIs:**
+- Serper API - Google Scholar search
+- Scenario API - AI image generation (Flux.1-dev model)

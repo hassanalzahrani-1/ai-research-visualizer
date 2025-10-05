@@ -1,13 +1,13 @@
 """
-Web Scraper for Research Paper Abstracts
-Extracts full abstracts from paper URLs with fallback to snippets
+Web Scraper for Research Papers
+Extracts abstracts from academic sources
 """
 
 import logging
-from typing import Optional, Dict
-from urllib.parse import urlparse
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
+from typing import Optional, Dict
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -15,8 +15,7 @@ from tenacity import (
     retry_if_exception_type
 )
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Get logger
 logger = logging.getLogger(__name__)
 
 
@@ -26,23 +25,22 @@ class ScraperError(Exception):
 
 
 class PaperScraper:
-    """Scraper for extracting abstracts from research paper URLs"""
+    """Scraper for extracting abstracts from academic paper URLs"""
     
-    def __init__(self, timeout: int = 10):
-        """
-        Initialize scraper
-        
-        Args:
-            timeout: Request timeout in seconds
-        """
-        self.timeout = timeout
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
+    # Headers to mimic a real browser
+    HEADERS = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1'
+    }
     
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=1, max=5),
         retry=retry_if_exception_type(requests.RequestException),
         reraise=True
     )
@@ -54,236 +52,139 @@ class PaperScraper:
             url: URL to fetch
             
         Returns:
-            Page HTML content
+            HTML content as string
             
         Raises:
-            requests.RequestException: If fetch fails after retries
+            ScraperError: If fetch fails
         """
-        logger.info(f"Fetching: {url}")
-        response = requests.get(url, headers=self.headers, timeout=self.timeout)
-        response.raise_for_status()
-        return response.text
+        try:
+            logger.info(f"Fetching: {url}")
+            response = requests.get(url, headers=self.HEADERS, timeout=10)
+            response.raise_for_status()
+            return response.text
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch {url}: {e}")
+            raise ScraperError(f"Failed to fetch page: {e}")
     
-    def scrape_abstract(self, url: str, fallback_snippet: str = "") -> Dict[str, str]:
+    def scrape_generic(self, url: str) -> Optional[str]:
         """
-        Scrape abstract from paper URL with fallback to snippet
+        Generic scraper for academic sites
         
         Args:
             url: Paper URL
-            fallback_snippet: Snippet to use if scraping fails
             
         Returns:
-            Dictionary with:
-                - abstract: Full abstract or snippet
-                - source: 'scraped' or 'snippet'
-                - success: Boolean indicating if scraping succeeded
+            Abstract text or None if failed
         """
         try:
-            # Parse domain to determine scraping strategy
-            domain = urlparse(url).netloc.lower()
-            
-            logger.info(f"Scraping abstract from: {domain}")
-            
-            # Try domain-specific scrapers
-            if 'arxiv.org' in domain:
-                abstract = self._scrape_arxiv(url)
-            elif 'pubmed' in domain or 'ncbi.nlm.nih.gov' in domain:
-                abstract = self._scrape_pubmed(url)
-            elif 'ieee' in domain:
-                abstract = self._scrape_ieee(url)
-            elif 'acm.org' in domain:
-                abstract = self._scrape_acm(url)
-            elif 'springer' in domain:
-                abstract = self._scrape_springer(url)
-            else:
-                # Generic scraper for other sites
-                abstract = self._scrape_generic(url)
-            
-            if abstract and len(abstract.strip()) > 50:
-                logger.info(f"Successfully scraped abstract ({len(abstract)} chars)")
-                return {
-                    'abstract': abstract.strip(),
-                    'source': 'scraped',
-                    'success': True
-                }
-            else:
-                logger.warning("Scraped abstract too short, using fallback")
-                raise ScraperError("Abstract too short")
-                
-        except Exception as e:
-            logger.warning(f"Scraping failed: {e}. Using fallback snippet.")
-            return {
-                'abstract': fallback_snippet,
-                'source': 'snippet',
-                'success': False
-            }
-    
-    def _scrape_arxiv(self, url: str) -> Optional[str]:
-        """Scrape abstract from arXiv"""
-        try:
             html = self._fetch_page(url)
-            soup = BeautifulSoup(html, 'lxml')
-            
-            # arXiv abstract is in blockquote with class 'abstract'
-            abstract_elem = soup.find('blockquote', class_='abstract')
-            if abstract_elem:
-                # Remove the "Abstract:" label
-                text = abstract_elem.get_text(strip=True)
-                return text.replace('Abstract:', '').strip()
-            
-            return None
-        except Exception as e:
-            logger.error(f"arXiv scraping error: {e}")
-            return None
-    
-    def _scrape_pubmed(self, url: str) -> Optional[str]:
-        """Scrape abstract from PubMed"""
-        try:
-            html = self._fetch_page(url)
-            soup = BeautifulSoup(html, 'lxml')
-            
-            # PubMed abstract is in div with class 'abstract-content'
-            abstract_elem = soup.find('div', class_='abstract-content')
-            if not abstract_elem:
-                # Try alternative selector
-                abstract_elem = soup.find('div', id='abstract')
-            
-            if abstract_elem:
-                return abstract_elem.get_text(strip=True)
-            
-            return None
-        except Exception as e:
-            logger.error(f"PubMed scraping error: {e}")
-            return None
-    
-    def _scrape_ieee(self, url: str) -> Optional[str]:
-        """Scrape abstract from IEEE"""
-        try:
-            html = self._fetch_page(url)
-            soup = BeautifulSoup(html, 'lxml')
-            
-            # IEEE abstract is in div with class 'abstract-text'
-            abstract_elem = soup.find('div', class_='abstract-text')
-            if not abstract_elem:
-                # Try alternative
-                abstract_elem = soup.find('div', {'class': 'u-mb-1'})
-            
-            if abstract_elem:
-                return abstract_elem.get_text(strip=True)
-            
-            return None
-        except Exception as e:
-            logger.error(f"IEEE scraping error: {e}")
-            return None
-    
-    def _scrape_acm(self, url: str) -> Optional[str]:
-        """Scrape abstract from ACM Digital Library"""
-        try:
-            html = self._fetch_page(url)
-            soup = BeautifulSoup(html, 'lxml')
-            
-            # ACM abstract
-            abstract_elem = soup.find('div', class_='abstractSection')
-            if not abstract_elem:
-                abstract_elem = soup.find('div', {'role': 'paragraph'})
-            
-            if abstract_elem:
-                return abstract_elem.get_text(strip=True)
-            
-            return None
-        except Exception as e:
-            logger.error(f"ACM scraping error: {e}")
-            return None
-    
-    def _scrape_springer(self, url: str) -> Optional[str]:
-        """Scrape abstract from Springer"""
-        try:
-            html = self._fetch_page(url)
-            soup = BeautifulSoup(html, 'lxml')
-            
-            # Springer abstract
-            abstract_elem = soup.find('div', class_='c-article-section__content')
-            if not abstract_elem:
-                abstract_elem = soup.find('section', {'data-title': 'Abstract'})
-            
-            if abstract_elem:
-                return abstract_elem.get_text(strip=True)
-            
-            return None
-        except Exception as e:
-            logger.error(f"Springer scraping error: {e}")
-            return None
-    
-    def _scrape_generic(self, url: str) -> Optional[str]:
-        """Generic scraper for unknown sites"""
-        try:
-            html = self._fetch_page(url)
-            soup = BeautifulSoup(html, 'lxml')
+            soup = BeautifulSoup(html, 'html.parser')
             
             # Try common abstract selectors
             selectors = [
-                ('meta', {'name': 'description'}),
-                ('meta', {'property': 'og:description'}),
-                ('div', {'class': 'abstract'}),
-                ('section', {'id': 'abstract'}),
-                ('div', {'id': 'abstract'}),
-                ('p', {'class': 'abstract'}),
+                ('class', ['abstract', 'Abstract', 'article-abstract', 'paper-abstract', 'abstract-content', 'abstractSection']),
+                ('id', ['abstract', 'Abstract', 'abst']),
+                ('data-testid', ['abstract'])
             ]
             
-            for tag, attrs in selectors:
-                elem = soup.find(tag, attrs)
-                if elem:
-                    if tag == 'meta':
-                        content = elem.get('content', '')
-                    else:
-                        content = elem.get_text(strip=True)
+            for selector_type, values in selectors:
+                for value in values:
+                    if selector_type == 'data-testid':
+                        elem = soup.find(['div', 'section'], attrs={selector_type: value})
+                    elif selector_type == 'id':
+                        elem = soup.find(['div', 'section'], id=value)
+                    else:  # class
+                        elem = soup.find(['div', 'section', 'p', 'blockquote'], class_=value)
                     
-                    if content and len(content) > 50:
+                    if elem:
+                        content = elem.get_text(strip=True).replace('Abstract:', '').replace('Abstract', '').strip()
+                        if len(content) > 100:
+                            logger.info(f"✓ Scraped abstract ({len(content)} chars)")
+                            return content
+            
+            # Fallback: Try meta tags
+            for meta_attr in [('name', 'description'), ('property', 'og:description')]:
+                meta = soup.find('meta', {meta_attr[0]: meta_attr[1]})
+                if meta and meta.get('content'):
+                    content = meta['content'].strip()
+                    if len(content) > 100:
+                        logger.info(f"✓ Scraped meta description ({len(content)} chars)")
                         return content
             
+            logger.warning("No abstract found")
             return None
+            
         except Exception as e:
-            logger.error(f"Generic scraping error: {e}")
+            logger.error(f"Scraping failed: {e}")
             return None
     
-    def batch_scrape(self, papers: list) -> list:
+    def scrape_paper(self, paper: Dict) -> Dict:
         """
-        Scrape abstracts for multiple papers
+        Scrape abstract for a paper
         
         Args:
-            papers: List of paper dictionaries with 'link' and 'snippet' keys
+            paper: Paper dict with 'link' key
             
         Returns:
-            Updated list of papers with 'abstract', 'abstract_source', and 'scrape_success' keys
+            Paper dict with added 'abstract' field
         """
-        logger.info(f"Batch scraping {len(papers)} papers")
+        url = paper.get('link', '')
         
-        for i, paper in enumerate(papers):
-            logger.info(f"Processing paper {i+1}/{len(papers)}")
+        if not url:
+            logger.warning("No URL provided")
+            paper['abstract'] = None
+            return paper
+        
+        logger.info(f"Scraping: {url}")
+        paper['abstract'] = self.scrape_generic(url)
+        
+        return paper
+    
+    def scrape_papers(self, papers: list, max_workers: int = 5) -> list:
+        """
+        Scrape abstracts for multiple papers concurrently
+        
+        Args:
+            papers: List of paper dicts
+            max_workers: Maximum number of concurrent scraping threads (default: 5)
             
-            result = self.scrape_abstract(
-                url=paper.get('link', ''),
-                fallback_snippet=paper.get('snippet', '')
-            )
+        Returns:
+            List of papers with abstracts added
+        """
+        logger.info(f"Starting to scrape {len(papers)} papers (max_workers={max_workers})")
+        
+        scraped_papers = [None] * len(papers)
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_index = {executor.submit(self.scrape_paper, paper): i for i, paper in enumerate(papers)}
             
-            paper['abstract'] = result['abstract']
-            paper['abstract_source'] = result['source']
-            paper['scrape_success'] = result['success']
+            for future in as_completed(future_to_index):
+                index = future_to_index[future]
+                try:
+                    scraped_papers[index] = future.result()
+                    logger.info(f"[{index + 1}/{len(papers)}] Completed")
+                except Exception as e:
+                    logger.error(f"[{index + 1}/{len(papers)}] Error: {e}")
+                    scraped_papers[index] = papers[index]
+                    scraped_papers[index]['abstract'] = None
         
-        success_count = sum(1 for p in papers if p.get('scrape_success'))
-        logger.info(f"Successfully scraped {success_count}/{len(papers)} abstracts")
+        successful = sum(1 for p in scraped_papers if p.get('abstract'))
+        logger.info(f"Scraping complete: {successful}/{len(papers)} successful")
         
-        return papers
+        return scraped_papers
 
 
-# Example usage
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     scraper = PaperScraper()
     
-    # Test with arXiv paper
-    test_url = "https://arxiv.org/abs/1706.03762"  # "Attention is All You Need"
-    result = scraper.scrape_abstract(test_url, fallback_snippet="Transformer architecture paper")
+    test_papers = [
+        {'title': 'Attention Is All You Need', 'link': 'https://arxiv.org/abs/1706.03762'},
+        {'title': 'Test Paper', 'link': 'https://pubmed.ncbi.nlm.nih.gov/12345678/'}
+    ]
     
-    print(f"\nSource: {result['source']}")
-    print(f"Success: {result['success']}")
-    print(f"Abstract: {result['abstract'][:200]}...")
+    results = scraper.scrape_papers(test_papers)
+    
+    for paper in results:
+        print(f"\n{paper['title']}")
+        print(f"Abstract: {paper.get('abstract', 'N/A')[:100]}...")

@@ -32,29 +32,6 @@ def test_serper_client_with_api_key():
         pytest.fail(f"Client initialization failed: {e}")
 
 
-def test_extract_citations():
-    """Test citation extraction"""
-    client = SerperClient(api_key="test_key")
-    
-    result = {
-        'inlineLinks': [
-            {'title': 'Cited by 123'}
-        ]
-    }
-    
-    citations = client._extract_citations(result)
-    assert citations == 123
-
-
-def test_extract_citations_no_data():
-    """Test citation extraction with no data"""
-    client = SerperClient(api_key="test_key")
-    
-    result = {'inlineLinks': []}
-    citations = client._extract_citations(result)
-    assert citations == 0
-
-
 def test_extract_year():
     """Test year extraction"""
     client = SerperClient(api_key="test_key")
@@ -78,20 +55,6 @@ def test_extract_year_no_data():
     assert year is None
 
 
-def test_extract_authors():
-    """Test author extraction"""
-    client = SerperClient(api_key="test_key")
-    
-    result = {
-        'publicationInfo': {
-            'summary': 'John Doe, Jane Smith - 2023'
-        }
-    }
-    
-    authors = client._extract_authors(result)
-    assert 'John Doe' in authors
-
-
 def test_parse_response():
     """Test response parsing"""
     client = SerperClient(api_key="test_key")
@@ -102,8 +65,7 @@ def test_parse_response():
                 'title': 'Test Paper',
                 'link': 'https://example.com',
                 'snippet': 'Test snippet',
-                'publicationInfo': {'summary': 'Test - 2023'},
-                'inlineLinks': [{'title': 'Cited by 10'}]
+                'publicationInfo': {'summary': 'Test - 2023'}
             }
         ]
     }
@@ -111,5 +73,24 @@ def test_parse_response():
     papers = client._parse_response(response)
     assert len(papers) == 1
     assert papers[0]['title'] == 'Test Paper'
-    assert papers[0]['cited_by'] == 10
     assert papers[0]['year'] == 2023
+
+
+def test_site_filter_in_query():
+    """Test that site filter is applied to search queries"""
+    client = SerperClient(api_key="test_key")
+    
+    # The search_scholar method should add site filtering
+    # We can't test the actual API call, but we can verify the method exists
+    assert hasattr(client, 'search_scholar')
+    assert callable(client.search_scholar)
+
+
+def test_serper_headers():
+    """Test that proper headers are set"""
+    client = SerperClient(api_key="test_key")
+    
+    assert 'X-API-KEY' in client.headers
+    assert client.headers['X-API-KEY'] == 'test_key'
+    assert 'Content-Type' in client.headers
+    assert client.headers['Content-Type'] == 'application/json'
