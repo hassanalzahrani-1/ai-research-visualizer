@@ -1,4 +1,7 @@
-# AI Research Paper Visualizer
+# AI Research Visualizer
+
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/hassanalzahrani-1/ai-research-visualizer)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 An intelligent system that searches academic papers, scrapes full abstracts, and generates AI-powered visual representations. Built with React, FastAPI, Serper API (Google Scholar search), web scraping, and Scenario API (AI image generation).
 
@@ -7,11 +10,13 @@ An intelligent system that searches academic papers, scrapes full abstracts, and
 - 🔍 **Smart Search**: Google Scholar search with 2025+ date filtering and site restrictions
 - 📄 **Web Scraping**: Extracts full abstracts from arXiv, PubMed, and ResearchGate
 - 🎨 **AI Image Generation**: Creates visual representations using Scenario's Flux.1-dev model
-- 🖼️ **Interactive UI**: Modern React frontend with bento grid layout and modal details view
+- 🖼️ **Modern UI**: Aurora animated background with MagicBento grid layout and animated text
+- 🎭 **Interactive Cards**: Particle effects, spotlight glow, and 3D tilt on hover
 - 🚀 **FastAPI Backend**: RESTful API with automatic Swagger documentation
 - 🔄 **Progressive Loading**: Images generate asynchronously for fast initial response
 - 🛡️ **Robust Error Handling**: Retry logic with exponential backoff on all API calls
-- 📊 **Postman Collection**: Pre-configured API testing collection included
+- 🔒 **Query Isolation**: Prevents search query contamination in image generation
+- 📊 **Postman Collection**: Pre-configured API testing collection (v1.0.0)
 
 ## Setup
 
@@ -235,10 +240,11 @@ ai-research-visualizer/
 │   ├── public/             # Static assets
 │   ├── src/
 │   │   ├── components/     # React components
-│   │   │   ├── MagicBento.js      # Bento grid layout
+│   │   │   ├── Aurora.js          # Animated background
+│   │   │   ├── MagicBento.js      # Bento grid with effects
 │   │   │   ├── PaperModal.js      # Paper details modal
-│   │   │   ├── AnimatedContent.js # Animation wrapper
-│   │   │   └── SearchForm.js      # Search input
+│   │   │   ├── SplitText.js       # Animated text component
+│   │   │   └── AnimatedContent.js # Animation wrapper
 │   │   ├── App.js          # Main app component
 │   │   └── index.js        # Entry point
 │   ├── package.json        # Node dependencies
@@ -342,11 +348,11 @@ This will test:
 ## Architecture
 
 ### Components
-1. **React Frontend**: Bento grid layout with modal details view, progressive image loading
-2. **Serper Client**: Google Scholar search with site filtering and retry logic
-3. **Web Scraper**: Extracts abstracts from arXiv, PubMed, ResearchGate (BeautifulSoup4)
-4. **Scenario Client**: AI image generation with Flux.1-dev model
-5. **FastAPI Backend**: RESTful API with Pydantic validation
+1. **React Frontend**: Aurora background, MagicBento grid with particle effects, spotlight glow, 3D tilt, animated text
+2. **Serper Client**: Google Scholar search with site filtering, retry logic, and query isolation
+3. **Web Scraper**: Optimized abstract extraction from arXiv, PubMed, ResearchGate (46% smaller codebase)
+4. **Scenario Client**: AI image generation with Flux.1-dev model and adaptive polling
+5. **FastAPI Backend**: RESTful API with Pydantic validation and snippet filtering
 6. **Error Handling**: Exponential backoff retry logic on all external API calls
 
 ### Workflow
@@ -362,16 +368,19 @@ This will test:
 ### Key Features
 - **Site Filtering**: `(site:arxiv.org OR site:pubmed.ncbi.nlm.nih.gov OR site:researchgate.net)`
 - **Progressive Loading**: Papers load instantly, images generate asynchronously
+- **Query Isolation**: Snippet field removed from image prompts to prevent search query contamination
 - **Abstract Truncation**: Full abstracts stored, but truncated to 500 chars for image prompts (faster generation)
 - **Modal View**: Click any card to see full abstract and large image
+- **Animated UI**: GSAP-powered text animations, particle effects, and spotlight interactions
 
 ## Technical Details
 
 ### Image Generation
 - **Model**: Scenario Flux.1-dev (high-quality text-to-image)
 - **Resolution**: 1024x1024px
-- **Prompt**: Full paper JSON (title, snippet, abstract, year)
+- **Prompt**: Paper JSON (title, abstract, year) - snippet excluded to prevent query contamination
 - **Generation Time**: 30-60 seconds per image
+
 
 ### Web Scraping
 - **Priority**: HTML class/ID selectors → Meta tags → Fallback to snippet
@@ -403,8 +412,9 @@ This project is open source. Please respect API providers' terms of service:
 
 **Frontend:**
 - React - UI framework
-- GSAP - Animations
-- CSS3 - Styling with glassmorphism effects
+- GSAP - Advanced animations (SplitText, ScrollTrigger)
+- CSS3 - Modern styling with glassmorphism and gradient effects
+- Lucide React - Icon library
 
 **APIs:**
 - Serper API - Google Scholar search
