@@ -156,11 +156,6 @@ GET /api/health
 ```
 Returns API status and service availability.
 
-#### 6. Get Last Result
-```bash
-GET /api/last-result
-```
-
 ### Using Postman
 
 Import the provided `postman_collection.json` file into Postman:
@@ -170,53 +165,6 @@ Import the provided `postman_collection.json` file into Postman:
 3. Select `postman_collection.json`
 4. Set the `base_url` variable to `http://localhost:8000`
 5. Start testing the API!
-
-## Examples
-
-### Example 1: Quick Search
-```python
-import requests
-
-response = requests.post('http://localhost:8000/api/search', json={
-    "query": "Deep Learning",
-    "num_results": 5
-})
-
-papers = response.json()['papers']
-for paper in papers:
-    print(f"{paper['title']} - {paper['cited_by']} citations")
-```
-
-### Example 2: Full Pipeline
-```python
-import requests
-
-response = requests.post('http://localhost:8000/api/process', json={
-    "query": "Transformer Architecture",
-    "num_papers": 3,
-    "generate_images": True
-})
-
-result = response.json()
-print(f"Processed {result['successful']}/{result['total_papers']} papers")
-
-for paper in result['papers']:
-    print(f"\nTitle: {paper['title']}")
-    print(f"Abstract: {paper['abstract'][:200]}...")
-    print(f"Images: {paper['image_paths']}")
-```
-
-## Output
-
-Generated images are saved in the `output/` directory with timestamps:
-
-```
-output/
-├── generated_image_20251001_153022_1.png
-├── generated_image_20251001_153022_2.png
-├── last_result.json
-└── ...
-```
 
 ## Security Features
 
@@ -368,7 +316,6 @@ This will test:
 ### Key Features
 - **Site Filtering**: `(site:arxiv.org OR site:pubmed.ncbi.nlm.nih.gov OR site:researchgate.net)`
 - **Progressive Loading**: Papers load instantly, images generate asynchronously
-- **Query Isolation**: Snippet field removed from image prompts to prevent search query contamination
 - **Abstract Truncation**: Full abstracts stored, but truncated to 500 chars for image prompts (faster generation)
 - **Modal View**: Click any card to see full abstract and large image
 - **Animated UI**: GSAP-powered text animations, particle effects, and spotlight interactions
