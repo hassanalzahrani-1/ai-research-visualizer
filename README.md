@@ -15,22 +15,40 @@ An intelligent system that searches academic papers, scrapes full abstracts, and
 - 🚀 **FastAPI Backend**: RESTful API with automatic Swagger documentation
 - 🔄 **Progressive Loading**: Images generate asynchronously for fast initial response
 - 🛡️ **Robust Error Handling**: Retry logic with exponential backoff on all API calls
-- 🔒 **Query Isolation**: Prevents search query contamination in image generation
-- 📊 **Postman Collection**: Pre-configured API testing collection (v1.0.0)
+- 📊 **Postman Collection**: Pre-configured API testing collection
+
+## Demo
+
+![Demo](Demo.gif)
 
 ## Setup
 
 ### 1. Clone or Download
 
-If you haven't already, navigate to your project directory.
+```bash
+git clone https://github.com/hassanalzahrani-1/ai-research-visualizer.git
+cd ai-research-visualizer
+```
 
-### 2. Install Dependencies
+### 2. Create Virtual Environment (Recommended)
+
+```bash
+# Windows
+python -m venv .venv
+.venv\Scripts\activate
+
+# Unix/Linux/Mac
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Get API Credentials
+### 4. Get API Credentials
 
 You'll need API keys from two services:
 
@@ -44,11 +62,15 @@ You'll need API keys from two services:
 2. Get your API key and secret from the dashboard
 3. Free tier available for testing
 
-### 4. Configure Environment Variables
+### 5. Configure Environment Variables
 
 1. Copy the example environment file:
    ```bash
+   # Windows
    copy .env.example .env
+   
+   # Unix/Linux/Mac
+   cp .env.example .env
    ```
 
 2. Edit the `.env` file and add your credentials:
@@ -115,11 +137,13 @@ Content-Type: application/json
       "snippet": "Short description...",
       "year": 2025,
       "abstract": "Full scraped abstract (1500+ chars)...",
-      "image_urls": []  // Populated progressively by frontend
+      "image_urls": []
     }
   ]
 }
 ```
+
+**Note:** `image_urls` is empty initially and populated progressively by frontend via `/api/generate-image`.
 
 **Workflow:**
 1. Searches Google Scholar (2025+ papers from arXiv/PubMed/ResearchGate)
@@ -135,9 +159,11 @@ Content-Type: application/json
 {
   "paper": {
     "title": "Paper Title",
-    "snippet": "...",
+    "link": "https://arxiv.org/abs/...",
+    "snippet": "Short description...",
+    "year": 2025,
     "abstract": "Full abstract...",
-    "year": 2025
+    "image_urls": []
   }
 }
 ```
@@ -150,11 +176,21 @@ Content-Type: application/json
 }
 ```
 
+**Note:** The `paper` object must include all fields from `ProcessedPaper` model. The backend truncates abstracts to 500 chars for faster generation and removes `snippet`, `link`, and `image_urls` before sending to Scenario API.
+
 #### 3. Health Check
 ```bash
 GET /api/health
 ```
-Returns API status and service availability.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "service": "AI Research Visualizer",
+  "version": "1.0.0"
+}
+```
 
 ### Using Postman
 
@@ -185,29 +221,36 @@ ai-research-visualizer/
 │   ├── scenario_client.py  # Image generation client
 │   └── scraper.py          # Web scraping module
 ├── frontend/
-│   ├── public/             # Static assets
+│   ├── public/             # Static assets (favicon, logos, manifest)
 │   ├── src/
-│   │   ├── components/     # React components
-│   │   │   ├── Aurora.js          # Animated background
-│   │   │   ├── MagicBento.js      # Bento grid with effects
+│   │   ├── components/
+│   │   │   ├── AnimatedContent.js # Scroll-triggered animations
+│   │   │   ├── Aurora.js          # WebGL animated background
+│   │   │   ├── MagicBento.js      # Bento grid with particle effects
+│   │   │   ├── MagicBento.css     # Bento grid styles
 │   │   │   ├── PaperModal.js      # Paper details modal
-│   │   │   ├── SplitText.js       # Animated text component
-│   │   │   └── AnimatedContent.js # Animation wrapper
+│   │   │   ├── PaperModal.css     # Modal styles
+│   │   │   └── SplitText.js       # GSAP text animations
 │   │   ├── App.js          # Main app component
-│   │   └── index.js        # Entry point
+│   │   ├── App.css         # App styles
+│   │   ├── App.test.js     # App tests
+│   │   ├── index.js        # Entry point
+│   │   ├── index.css       # Global styles
+│   │   ├── utils.js        # Utility functions
+│   │   ├── setupTests.js   # Test configuration
+│   │   └── reportWebVitals.js
 │   ├── package.json        # Node dependencies
-│   └── .env                # Frontend environment (gitignored)
+│   └── README.md           # Frontend documentation
 ├── tests/
+│   ├── __init__.py
 │   ├── test_api.py         # API endpoint tests
 │   ├── test_serper_client.py
 │   └── test_scraper.py
-├── output/                 # Generated images and results
 ├── .env.example           # Environment variables template
 ├── .env                   # Your API keys (gitignored)
 ├── .gitignore
 ├── requirements.txt       # Python dependencies
 ├── pytest.ini             # Pytest configuration
-├── test_e2e.py            # End-to-end test script
 ├── postman_collection.json # Postman API collection
 └── README.md
 ```
@@ -226,7 +269,7 @@ ai-research-visualizer/
 ### Scraping Failures
 - Site filter restricts to arXiv, PubMed, and ResearchGate (scrapable sources)
 - If scraping fails, `abstract` field will be `null` (frontend uses snippet as fallback)
-- Check `scraper_results.json` for detailed scraping logs
+- Check backend logs for detailed scraping information
 
 ### Image Generation Timeout
 - Image generation can take 30-60 seconds per paper
@@ -257,23 +300,6 @@ pytest -v
 pytest tests/test_api.py
 ```
 
-### End-to-End Test
-
-Run the complete workflow test:
-```bash
-# Make sure the backend is running first
-python -m uvicorn backend.app:app --reload
-
-# In another terminal, run the E2E test
-python test_e2e.py
-```
-
-This will test:
-1. ✓ Health check
-2. ✓ Search papers
-3. ✓ Full pipeline (search + scrape + generate)
-4. ✓ Last result retrieval
-
 ### Manual Testing
 
 #### Using the Web Interface
@@ -297,10 +323,10 @@ This will test:
 
 ### Components
 1. **React Frontend**: Aurora background, MagicBento grid with particle effects, spotlight glow, 3D tilt, animated text
-2. **Serper Client**: Google Scholar search with site filtering, retry logic, and query isolation
+2. **Serper Client**: Google Scholar search with site filtering and retry logic
 3. **Web Scraper**: Optimized abstract extraction from arXiv, PubMed, ResearchGate (46% smaller codebase)
 4. **Scenario Client**: AI image generation with Flux.1-dev model and adaptive polling
-5. **FastAPI Backend**: RESTful API with Pydantic validation and snippet filtering
+5. **FastAPI Backend**: RESTful API with Pydantic validation
 6. **Error Handling**: Exponential backoff retry logic on all external API calls
 
 ### Workflow
@@ -325,7 +351,7 @@ This will test:
 ### Image Generation
 - **Model**: Scenario Flux.1-dev (high-quality text-to-image)
 - **Resolution**: 1024x1024px
-- **Prompt**: Paper JSON (title, abstract, year) - snippet excluded to prevent query contamination
+- **Prompt**: Paper JSON (title, abstract, year)
 - **Generation Time**: 30-60 seconds per image
 
 
@@ -360,7 +386,9 @@ This project is open source. Please respect API providers' terms of service:
 **Frontend:**
 - React - UI framework
 - GSAP - Advanced animations (SplitText, ScrollTrigger)
-- CSS3 - Modern styling with glassmorphism and gradient effects
+- OGL - WebGL library for Aurora background effects
+- Tailwind CSS - Utility-first CSS framework
+- CSS3 - Custom styling with glassmorphism and gradient effects
 - Lucide React - Icon library
 
 **APIs:**
